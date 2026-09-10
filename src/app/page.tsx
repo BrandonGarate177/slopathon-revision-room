@@ -1,12 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { RevisionNote, RevisionSheet } from "@/lib/revision-room";
+import type { Cue, RevisionNote, RevisionSheet } from "@/lib/revision-room";
 import example from "../../fixtures/example-session.json";
+import cueFixture from "../../fixtures/cues.json";
 
 const SONG = "The Clarity Principle";
 const SRC = "/audio/clarity-principle.mp3";
 const SONG_ID = "clarity-principle";
+// Brief-derived cues, hand-written for now. Later: a `cues` column on the song record.
+const CUES = cueFixture.cues as Cue[];
+const CUES_JSON = JSON.stringify(CUES);
+const cueEnd = (c: Cue) => c.until ?? c.at + 15;
 
 type Status = "idle" | "recording" | "reacting" | "thinking";
 
@@ -62,6 +67,14 @@ export default function RevisionRoom() {
     el.currentTime = ((e.clientX - r.left) / r.width) * duration;
   };
   const needsWord = notes.filter((n) => n.vague).length;
+  // Guided Listen: the cue whose window playback is inside, and every cue already passed.
+  const activeCue = CUES.find((c) => time >= c.at && time < cueEnd(c)) ?? null;
+  const pastCues = CUES.filter((c) => time >= cueEnd(c));
+  const noteForCue = (c: Cue) =>
+    notes.find((n) => n.cue_id === c.id) ??
+    notes.find((n) => n.timestamp_seconds >= c.at && n.timestamp_seconds < cueEnd(c)) ??
+    null;
+  const drainPct = activeCue ? Math.max(0, 100 - ((time - activeCue.at) / (cueEnd(activeCue) - activeCue.at)) * 100) : 0;
 
 
   const speak = useCallback((text: string, dataUrl?: string | null) => {
@@ -115,6 +128,7 @@ export default function RevisionRoom() {
     form.append("audio", audio, "note.webm");
     form.append("timestamp_seconds", String(startedAtRef.current));
     form.append("note_index", String(notes.length));
+    form.append("cues", CUES_JSON);
     if (pending) form.append("previous", JSON.stringify(pending));
 
     try {
@@ -160,6 +174,7 @@ export default function RevisionRoom() {
     const form = new FormData();
     form.append("audio", audio, "reaction.webm");
     form.append("offset_seconds", String(reactionOffsetRef.current));
+    form.append("cues", CUES_JSON);
     try {
       const res = await fetch("/api/reaction", { method: "POST", body: form });
       const data = (await res.json()) as { notes: RevisionNote[]; demo: boolean; error?: string };
@@ -228,7 +243,7 @@ export default function RevisionRoom() {
     const res = await fetch("/api/sheet", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ song: SONG, notes: [...notes, ...extra], mode, song_id: SONG_ID }),
+      body: JSON.stringify({ song: SONG, notes: [...notes, ...extra], cues: CUES, mode, song_id: SONG_ID }),
     });
     const data = (await res.json()) as { sheet: RevisionSheet; readback_audio: string | null; demo: boolean };
     setSheet(data.sheet);
@@ -356,7 +371,8 @@ export default function RevisionRoom() {
         </section>
       )}
 
-      <section className="player" aria-label="Draft player" style={isClient && (!started || sheet) ? { display: "none" } : undefined}>
+      <div className="stage" style={isClient && (!started || sheet) ? { display: "none" } : undefined}>
+      <section className="player" aria-label="Draft player">
         <div className="song">
           <span className="t">{SONG}</span>
           <span className="m">{formatTime(time)} / {formatTime(duration)}</span>
@@ -366,6 +382,9 @@ export default function RevisionRoom() {
             <i key={i} className={pct(time) > (i / bars.length) * 100 ? "p" : ""} style={{ height: `${h}%` }} />
           ))}
           <span className="head" data-t={formatTime(time)} style={{ left: `${pct(time)}%` }} />
+          {CUES.map((c) => (
+            <span key={c.id} className={`dot cue ${c.kind}`} style={{ left: `${pct(c.at)}%` }} title={c.question} />
+          ))}
           {notes.map((n) => (
             <span key={n.id} className={`dot ${priClass(n)}`} style={{ left: `${pct(n.timestamp_seconds)}%` }} title={n.timestamp_label} />
           ))}
@@ -436,6 +455,45 @@ export default function RevisionRoom() {
         {error && <p className="err">{error}</p>}
       </section>
 
+      <aside className="cues" aria-label="Cues from the brief">
+        <h2>From the brief</h2>
+        {!activeCue && pastCues.length === 0 && (
+          <p className="empty">Cues from your brief appear here as the song plays.</p>
+        )}
+        {activeCue && (
+          <div className="cue on" role="status">
+            <div className="chips">
+              <span className="chip">{activeCue.section}</span>
+              <span className={`chip kind ${activeCue.kind}`}>{activeCue.kind}</span>
+            </div>
+            <div className="q">{activeCue.question}</div>
+            <div className="drain" aria-hidden="true"><i style={{ width: `${drainPct}%` }} /></div>
+          </div>
+        )}
+        {pastCues.length > 0 && (
+          <div className="past">
+            {[...pastCues].reverse().map((c) => {
+              const n = noteForCue(c);
+              return (
+                <div key={c.id} className="cue">
+                  <div className="chips">
+                    <span className="chip">{c.section}</span>
+                    <span className={`chip kind ${c.kind}`}>{c.kind}</span>
+                  </div>
+                  <div className="q">{c.question}</div>
+                  {n ? (
+                    <div className="r ok">✓ <span className={`chip pri ${priClass(n)}`}>{priLabel(n)}</span></div>
+                  ) : (
+                    <div className="r">no reaction</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </aside>
+      </div>
+
       <section className="sec" aria-label="Notes on the timeline" style={isClient && !started ? { display: "none" } : undefined}>
         <h2>On the timeline</h2>
         {notes.length === 0 && <p className="empty">No notes yet. Press record and say what you hear.</p>}
@@ -472,14 +530,46 @@ export default function RevisionRoom() {
           </div>
           <p className="readback"><b>Read-back:</b> {sheet.readback_text}</p>
           {!isClient && (
-            <>
-              <div className="controls">
-                <button className="btn solid" onClick={download}>Download JSON</button>
-                <button className="btn" onClick={() => speak(sheet.readback_text)}>Play read-back</button>
-              </div>
-              <pre className="json">{JSON.stringify(sheet, null, 2)}</pre>
-            </>
+            <div className="controls">
+              <button className="btn solid" onClick={download}>Download JSON</button>
+              <button className="btn" onClick={() => speak(sheet.readback_text)}>Play read-back</button>
+            </div>
           )}
+          {(sheet.confirmed_checks.length > 0 || sheet.unanswered_checks.length > 0) && (
+            <div className="checks">
+              {sheet.confirmed_checks.length > 0 && (
+                <>
+                  <h2>Confirmed required checks</h2>
+                  <ul>
+                    {sheet.confirmed_checks.map((c) => (
+                      <li key={c.cue.id}>
+                        <span className="ts">{formatTime(c.cue.at)}</span>
+                        <span className="chip">{c.cue.section}</span>
+                        <span>{c.cue.question}</span>
+                        {c.note && <span className={`chip pri ${priClass(c.note)}`}>{priLabel(c.note)}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {sheet.unanswered_checks.length > 0 && (
+                <>
+                  <h2 className="miss">Unanswered required checks</h2>
+                  <ul>
+                    {sheet.unanswered_checks.map((c) => (
+                      <li key={c.cue.id}>
+                        <span className="ts">{formatTime(c.cue.at)}</span>
+                        <span className="chip">{c.cue.section}</span>
+                        <span>{c.cue.question}</span>
+                        <span className="chip">no reaction</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          )}
+          {!isClient && <pre className="json">{JSON.stringify(sheet, null, 2)}</pre>}
         </section>
       )}
       {toast && <div className="toast" role="status">{toast}</div>}

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import {
   isDemoMode,
+  parseCues,
   structureReactionTrack,
+  tagWithCues,
   transcribeReactionTrack,
   type RevisionNote,
 } from "@/lib/revision-room";
@@ -17,16 +19,17 @@ export const maxDuration = 120;
 export async function POST(req: Request) {
   const form = await req.formData();
   const offset = Number(form.get("offset_seconds") ?? 0);
+  const cues = parseCues(form.get("cues"));
 
   if (isDemoMode()) {
     // Offline demonstration mode replays the recorded session (OR-13).
-    return NextResponse.json({ notes: fixture.notes as RevisionNote[], demo: true });
+    return NextResponse.json({ notes: tagWithCues(fixture.notes as RevisionNote[], cues), demo: true });
   }
   const audio = form.get("audio");
   if (!(audio instanceof Blob)) {
     return NextResponse.json({ error: "audio missing" }, { status: 400 });
   }
   const segments = await transcribeReactionTrack(audio, offset);
-  const notes = await structureReactionTrack(segments);
+  const notes = await structureReactionTrack(segments, cues);
   return NextResponse.json({ notes, demo: false });
 }

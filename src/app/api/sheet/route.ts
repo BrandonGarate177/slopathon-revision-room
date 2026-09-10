@@ -4,6 +4,7 @@ import {
   isDemoMode,
   saveRevisionSession,
   speakReadBack,
+  type Cue,
   type RevisionNote,
 } from "@/lib/revision-room";
 
@@ -15,13 +16,14 @@ export const runtime = "nodejs";
  * read-back for the client (OR-2).
  */
 export async function POST(req: Request) {
-  const { song, notes, mode = "founder", song_id = "clarity-principle" } = (await req.json()) as {
+  const { song, notes, cues, mode = "founder", song_id = "clarity-principle" } = (await req.json()) as {
     song: string;
     notes: RevisionNote[];
+    cues?: Cue[];
     mode?: string;
     song_id?: string;
   };
-  const sheet = buildRevisionSheet(song, notes);
+  const sheet = buildRevisionSheet(song, notes, cues ?? []);
   // A failed disk write must not take the read-back down with it.
   await saveRevisionSession(sheet, { mode, song: song_id }).catch((e) => console.error("saveRevisionSession", e));
 
