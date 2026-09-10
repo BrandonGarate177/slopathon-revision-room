@@ -13,7 +13,8 @@
       "priority": "nice-to-have",
       "vague": false,
       "clarifying_question": null,
-      "clarification": null
+      "clarification": null,
+      "cue_id": "c1"
     },
     {
       "id": "fx-2",
@@ -26,7 +27,8 @@
       "priority": "must-fix",
       "vague": true,
       "clarifying_question": "Got it. Is it the words in verse two, or the way they're sung?",
-      "clarification": null
+      "clarification": null,
+      "cue_id": "c2"
     },
     {
       "id": "fx-3",
@@ -39,7 +41,8 @@
       "priority": "must-fix",
       "vague": false,
       "clarifying_question": null,
-      "clarification": null
+      "clarification": null,
+      "cue_id": "c3"
     },
     {
       "id": "fx-4",
@@ -52,7 +55,8 @@
       "priority": "nice-to-have",
       "vague": false,
       "clarifying_question": null,
-      "clarification": null
+      "clarification": null,
+      "cue_id": "c4"
     }
   ]
 }

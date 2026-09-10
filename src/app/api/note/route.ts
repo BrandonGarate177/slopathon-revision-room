@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import {
   isDemoMode,
+  parseCues,
   structureRevisionNote,
+  tagWithCues,
   transcribeSpokenFeedback,
   type RevisionNote,
 } from "@/lib/revision-room";
@@ -19,10 +21,11 @@ export async function POST(req: Request) {
   const previousRaw = form.get("previous");
   const previous = previousRaw ? (JSON.parse(String(previousRaw)) as RevisionNote) : null;
   const noteIndex = Number(form.get("note_index") ?? 0);
+  const cues = parseCues(form.get("cues"));
 
   if (isDemoMode()) {
     // Offline demonstration mode: replay a recorded session instead of calling paid APIs (OR-13).
-    const notes = fixture.notes as RevisionNote[];
+    const notes = tagWithCues(fixture.notes as RevisionNote[], cues);
     if (previous) {
       return NextResponse.json({ note: { ...previous, vague: false, clarifying_question: null, clarification: fixture.clarification }, demo: true });
     }
@@ -39,6 +42,7 @@ export async function POST(req: Request) {
     transcript,
     timestamp_seconds: timestamp,
     previous,
+    cues,
   });
   return NextResponse.json({ note, demo: false });
 }

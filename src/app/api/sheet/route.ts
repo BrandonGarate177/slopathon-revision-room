@@ -3,6 +3,7 @@ import {
   buildRevisionSheet,
   isDemoMode,
   speakReadBack,
+  type Cue,
   type RevisionNote,
 } from "@/lib/revision-room";
 
@@ -14,8 +15,8 @@ export const runtime = "nodejs";
  * read-back for the client (OR-2).
  */
 export async function POST(req: Request) {
-  const { song, notes } = (await req.json()) as { song: string; notes: RevisionNote[] };
-  const sheet = buildRevisionSheet(song, notes);
+  const { song, notes, cues } = (await req.json()) as { song: string; notes: RevisionNote[]; cues?: Cue[] };
+  const sheet = buildRevisionSheet(song, notes, cues ?? []);
 
   if (isDemoMode()) {
     // Browser speech synthesis handles the read-back in offline mode (OR-13).

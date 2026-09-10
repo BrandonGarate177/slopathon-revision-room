@@ -1,0 +1,10 @@
+{
+  "song": "The Clarity Principle",
+  "cues": [
+    { "id": "c1", "at": 14, "until": 30, "section": "Intro", "kind": "vibe", "question": "Does this open like your all-hands should?" },
+    { "id": "c2", "at": 47, "until": 62, "section": "Verse 2", "kind": "lyric", "question": "This verse carries the 'humans in the driver's seat' line. Does it read right?" },
+    { "id": "c3", "at": 71, "until": 86, "section": "Chorus", "kind": "required", "question": "The required message is 80/20. Did you hear the number?", "must_confirm": true },
+    { "id": "c4", "at": 98, "until": 112, "section": "Bridge", "kind": "mix", "question": "Energy check. Too much, too little, or right?" },
+    { "id": "c5", "at": 124, "until": 139, "section": "Outro", "kind": "required", "question": "The close names the company. Did 'Clarity' land as the last word you heard?", "must_confirm": true }
+  ]
+}

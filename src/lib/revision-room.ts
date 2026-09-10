@@ -38,6 +38,35 @@ export interface RevisionNote {
   clarifying_question: string | null;
   /** The client's spoken answer to the clarifying question, if any. */
   clarification: string | null;
+  /** The brief-derived cue whose window this note landed in, if any. */
+  cue_id: string | null;
+}
+
+export type CueKind = "required" | "lyric" | "vibe" | "mix" | "pronunciation";
+
+/** One question from the brief, pinned to a window of the song. */
+export interface Cue {
+  id: string;
+  at: number;
+  until?: number;
+  section: string;
+  kind: CueKind;
+  question: string;
+  must_confirm?: boolean;
+}
+
+export interface CueCheck {
+  cue: Cue;
+  note: RevisionNote | null;
+}
+
+export function cueEnd(c: Cue): number {
+  return c.until ?? c.at + 15;
+}
+
+/** The cue whose window contains this playback position, if any. */
+export function matchCue(timestamp: number, cues: Cue[]): Cue | null {
+  return cues.find((c) => timestamp >= c.at && timestamp < cueEnd(c)) ?? null;
 }
 
 export interface RevisionSheet {
@@ -50,6 +79,10 @@ export interface RevisionSheet {
   /** What the agent says back to the client to confirm the sheet. */
   readback_text: string;
   cost_estimate_usd: number;
+  /** Required cues that got a remark inside their window. */
+  confirmed_checks: CueCheck[];
+  /** Required cues nobody reacted to. The founder's blind spot, made visible. */
+  unanswered_checks: CueCheck[];
 }
 
 /** Offline demonstration mode: recorded fixtures, no paid API calls (OR-13). */
@@ -94,6 +127,7 @@ Rules:
 - "priority" is "must-fix" if the client is clearly unhappy or says it must change, "nice-to-have" if it is a preference, "unclear" if you cannot tell.
 - "vague" is true only when the note cannot be acted on without one more fact (for example "verse two feels corny" — is it the lyric or the delivery?). When vague, write ONE short clarifying_question, spoken naturally, that resolves it. Otherwise clarifying_question is null.
 - If a clarification answer is provided, fold it in, set vague to false and clarifying_question to null.
+- If a cue question is provided, the client is answering that question: use the cue's section and write the production note as the answer (for example "Client confirms the 80/20 line is audible in the chorus.").
 Return only JSON with keys: section, category, production_note, priority, vague, clarifying_question.`;
 
 interface StructuredFields {
@@ -113,10 +147,15 @@ export async function structureRevisionNote(input: {
   transcript: string;
   timestamp_seconds: number;
   previous?: RevisionNote | null;
+  cues?: Cue[];
 }): Promise<RevisionNote> {
   const label = formatTimestamp(input.timestamp_seconds);
+  const cue = input.previous?.cue_id
+    ? (input.cues ?? []).find((c) => c.id === input.previous?.cue_id) ?? null
+    : matchCue(input.timestamp_seconds, input.cues ?? []);
   const user = [
     `Timestamp: ${label}`,
+    cue ? `Cue (${cue.section}, ${cue.kind}): the client was asked "${cue.question}"` : "",
     `Client said: "${input.transcript}"`,
     input.previous
       ? `This is an answer to your clarifying question "${input.previous.clarifying_question}" about the earlier note "${input.previous.transcript}".`
@@ -150,10 +189,27 @@ export async function structureRevisionNote(input: {
     vague: Boolean(fields.vague),
     clarifying_question: fields.vague ? fields.clarifying_question : null,
     clarification: base ? input.transcript : null,
+    cue_id: cue?.id ?? base?.cue_id ?? null,
   };
 }
 
 /** Rough per-session cost so the founder knows what one run costs (OR-10). */
+/** Parse the optional `cues` form field the client sends with every recording. */
+export function parseCues(raw: FormDataEntryValue | string | null | undefined): Cue[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(String(raw)) as Cue[] | { cues: Cue[] };
+    return Array.isArray(v) ? v : v.cues ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/** Demo mode: fixture notes without a cue_id get one by timestamp. */
+export function tagWithCues(notes: RevisionNote[], cues: Cue[]): RevisionNote[] {
+  return notes.map((n) => ({ ...n, cue_id: n.cue_id ?? matchCue(n.timestamp_seconds, cues)?.id ?? null }));
+}
+
 export function estimateSessionCost(notes: RevisionNote[], readbackChars: number): number {
   const whisperMinutes = notes.length * 0.15; // ~9s per spoken note
   const whisper = whisperMinutes * 0.006;
@@ -163,7 +219,21 @@ export function estimateSessionCost(notes: RevisionNote[], readbackChars: number
 }
 
 /** Prioritize every note into the revision sheet the writer consumes (MR-3). */
-export function buildRevisionSheet(song: string, notes: RevisionNote[]): RevisionSheet {
+export function buildRevisionSheet(song: string, notes: RevisionNote[], cues: Cue[] = []): RevisionSheet {
+  const required = cues.filter((c) => c.must_confirm);
+  const checks: CueCheck[] = required.map((cue) => ({
+    cue,
+    note: notes.find((n) => n.cue_id === cue.id) ?? notes.find((n) => matchCue(n.timestamp_seconds, [cue])) ?? null,
+  }));
+  const confirmed_checks = checks.filter((c) => c.note);
+  const unanswered_checks = checks.filter((c) => !c.note);
+  const checkLine = required.length
+    ? `${confirmed_checks.length} required check${confirmed_checks.length === 1 ? "" : "s"} confirmed${
+        unanswered_checks.length
+          ? `, ${unanswered_checks.length} unanswered: ${unanswered_checks.map((c) => `the ${c.cue.section.toLowerCase()} ${c.cue.kind === "required" ? "message" : c.cue.kind}`).join(", ")}`
+          : ""
+      }.`
+    : "";
   const byTime = [...notes].sort((a, b) => a.timestamp_seconds - b.timestamp_seconds);
   const must_fix = byTime.filter((n) => n.priority === "must-fix" && !n.vague);
   const nice_to_have = byTime.filter((n) => n.priority === "nice-to-have" && !n.vague);
@@ -179,6 +249,7 @@ export function buildRevisionSheet(song: string, notes: RevisionNote[]): Revisio
       ? `Nice to have: ${nice_to_have.map((n) => `at ${n.timestamp_label}, ${n.production_note}`).join(". ")}.`
       : "",
     unclear.length ? `I still need a word on ${unclear.length} note${unclear.length > 1 ? "s" : ""}.` : "",
+    checkLine,
     "Sending this to the writer now.",
   ].filter(Boolean);
   const readback_text = readbackParts.join(" ");
@@ -192,6 +263,8 @@ export function buildRevisionSheet(song: string, notes: RevisionNote[]): Revisio
     unclear,
     readback_text,
     cost_estimate_usd: estimateSessionCost(notes, readback_text.length),
+    confirmed_checks,
+    unanswered_checks,
   };
 }
 
@@ -234,8 +307,9 @@ export async function transcribeReactionTrack(
 /** Every reaction segment becomes one structured revision note. */
 export async function structureReactionTrack(
   segments: Array<{ start: number; text: string }>,
+  cues: Cue[] = [],
 ): Promise<RevisionNote[]> {
   return Promise.all(
-    segments.map((s) => structureRevisionNote({ transcript: s.text, timestamp_seconds: s.start })),
+    segments.map((s) => structureRevisionNote({ transcript: s.text, timestamp_seconds: s.start, cues })),
   );
 }
