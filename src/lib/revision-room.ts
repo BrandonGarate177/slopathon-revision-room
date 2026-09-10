@@ -1,0 +1,205 @@
+/**
+ * Revision Room — the whole primary workflow in one module.
+ *
+ * Friction F2: client feedback on a draft banger arrives as untimestamped,
+ * unprioritized prose in email, and someone translates it into production
+ * notes by hand. Here the client talks while the track plays. Every spoken
+ * note is stamped with the playback position, transcribed, structured, and
+ * (when vague) answered with one clarifying question. The session ends as a
+ * machine-readable revision sheet the writer can act on directly.
+ */
+import OpenAI from "openai";
+
+export type Priority = "must-fix" | "nice-to-have" | "unclear";
+export type Category =
+  | "lyric"
+  | "vocal"
+  | "instrumentation"
+  | "mix"
+  | "structure"
+  | "other";
+
+export interface RevisionNote {
+  id: string;
+  /** Playback position in the draft when the client started talking. */
+  timestamp_seconds: number;
+  timestamp_label: string;
+  /** Verbatim transcript of what the client said. */
+  transcript: string;
+  /** Best guess at the song section the note is about. */
+  section: string;
+  category: Category;
+  /** The production note a writer can act on, in one sentence. */
+  production_note: string;
+  priority: Priority;
+  /** True when the note is too vague to act on and needs one follow-up. */
+  vague: boolean;
+  /** The one follow-up the agent asks when the note is vague. */
+  clarifying_question: string | null;
+  /** The client's spoken answer to the clarifying question, if any. */
+  clarification: string | null;
+}
+
+export interface RevisionSheet {
+  song: string;
+  created_at: string;
+  summary: string;
+  must_fix: RevisionNote[];
+  nice_to_have: RevisionNote[];
+  unclear: RevisionNote[];
+  /** What the agent says back to the client to confirm the sheet. */
+  readback_text: string;
+  cost_estimate_usd: number;
+}
+
+/** Offline demonstration mode: recorded fixtures, no paid API calls (OR-13). */
+export function isDemoMode(): boolean {
+  return (
+    process.env.REVISION_ROOM_DEMO_MODE === "1" || !process.env.OPENAI_API_KEY
+  );
+}
+
+function client(): OpenAI {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
+
+export function formatTimestamp(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+/** Transcribe the client's spoken feedback into text (OR-1). */
+export async function transcribeSpokenFeedback(
+  audio: File | Blob,
+): Promise<string> {
+  const file =
+    audio instanceof File ? audio : new File([audio], "note.webm", { type: "audio/webm" });
+  const result = await client().audio.transcriptions.create({
+    model: "whisper-1",
+    file,
+    prompt:
+      "Client feedback on a draft song: chorus, verse, bridge, hook, drums, vocals, lyrics, corny, energy.",
+  });
+  return result.text.trim();
+}
+
+const STRUCTURE_PROMPT = `You are the Revision Room agent for Business Bangerz, a company that writes original songs for business messages.
+A client is listening to a draft song and talking while it plays. Turn ONE spoken note into a structured production note.
+
+Rules:
+- "section" is your best guess at the song section (e.g. "Chorus", "Verse 2", "Intro", "Bridge") from the words and the timestamp. If unsure, use the timestamp label.
+- "production_note" is one sentence a songwriter can act on, in the writer's language, not the client's.
+- "priority" is "must-fix" if the client is clearly unhappy or says it must change, "nice-to-have" if it is a preference, "unclear" if you cannot tell.
+- "vague" is true only when the note cannot be acted on without one more fact (for example "verse two feels corny" — is it the lyric or the delivery?). When vague, write ONE short clarifying_question, spoken naturally, that resolves it. Otherwise clarifying_question is null.
+- If a clarification answer is provided, fold it in, set vague to false and clarifying_question to null.
+Return only JSON with keys: section, category, production_note, priority, vague, clarifying_question.`;
+
+interface StructuredFields {
+  section: string;
+  category: Category;
+  production_note: string;
+  priority: Priority;
+  vague: boolean;
+  clarifying_question: string | null;
+}
+
+/**
+ * Turn a transcribed note into a structured revision note (MR-3), asking one
+ * follow-up question when the answer is vague or incomplete (OR-3).
+ */
+export async function structureRevisionNote(input: {
+  transcript: string;
+  timestamp_seconds: number;
+  previous?: RevisionNote | null;
+}): Promise<RevisionNote> {
+  const label = formatTimestamp(input.timestamp_seconds);
+  const user = [
+    `Timestamp: ${label}`,
+    `Client said: "${input.transcript}"`,
+    input.previous
+      ? `This is an answer to your clarifying question "${input.previous.clarifying_question}" about the earlier note "${input.previous.transcript}".`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const completion = await client().chat.completions.create({
+    model: "gpt-4o-mini",
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: STRUCTURE_PROMPT },
+      { role: "user", content: user },
+    ],
+  });
+  const fields = JSON.parse(
+    completion.choices[0].message.content ?? "{}",
+  ) as StructuredFields;
+
+  const base = input.previous;
+  return {
+    id: base?.id ?? crypto.randomUUID(),
+    timestamp_seconds: base?.timestamp_seconds ?? input.timestamp_seconds,
+    timestamp_label: base?.timestamp_label ?? label,
+    transcript: base?.transcript ?? input.transcript,
+    section: fields.section,
+    category: fields.category,
+    production_note: fields.production_note,
+    priority: fields.priority,
+    vague: Boolean(fields.vague),
+    clarifying_question: fields.vague ? fields.clarifying_question : null,
+    clarification: base ? input.transcript : null,
+  };
+}
+
+/** Rough per-session cost so the founder knows what one run costs (OR-10). */
+export function estimateSessionCost(notes: RevisionNote[], readbackChars: number): number {
+  const whisperMinutes = notes.length * 0.15; // ~9s per spoken note
+  const whisper = whisperMinutes * 0.006;
+  const structuring = notes.length * 0.0004; // gpt-4o-mini, ~800 tokens per note
+  const tts = (readbackChars / 1_000_000) * 15; // tts-1
+  return Number((whisper + structuring + tts).toFixed(4));
+}
+
+/** Prioritize every note into the revision sheet the writer consumes (MR-3). */
+export function buildRevisionSheet(song: string, notes: RevisionNote[]): RevisionSheet {
+  const byTime = [...notes].sort((a, b) => a.timestamp_seconds - b.timestamp_seconds);
+  const must_fix = byTime.filter((n) => n.priority === "must-fix" && !n.vague);
+  const nice_to_have = byTime.filter((n) => n.priority === "nice-to-have" && !n.vague);
+  const unclear = byTime.filter((n) => n.priority === "unclear" || n.vague);
+
+  const summary = `${must_fix.length} must-fix, ${nice_to_have.length} nice-to-have, ${unclear.length} still unclear across ${notes.length} timestamped notes.`;
+  const readbackParts = [
+    `Here is what I have for ${song}.`,
+    must_fix.length
+      ? `Must fix: ${must_fix.map((n) => `at ${n.timestamp_label}, ${n.production_note}`).join(". ")}.`
+      : "Nothing is marked must fix.",
+    nice_to_have.length
+      ? `Nice to have: ${nice_to_have.map((n) => `at ${n.timestamp_label}, ${n.production_note}`).join(". ")}.`
+      : "",
+    unclear.length ? `I still need a word on ${unclear.length} note${unclear.length > 1 ? "s" : ""}.` : "",
+    "Sending this to the writer now.",
+  ].filter(Boolean);
+  const readback_text = readbackParts.join(" ");
+
+  return {
+    song,
+    created_at: new Date().toISOString(),
+    summary,
+    must_fix,
+    nice_to_have,
+    unclear,
+    readback_text,
+    cost_estimate_usd: estimateSessionCost(notes, readback_text.length),
+  };
+}
+
+/** Speak the sheet back to the client with synthesized speech (OR-2). Returns MP3 bytes. */
+export async function speakReadBack(text: string): Promise<Buffer> {
+  const speech = await client().audio.speech.create({
+    model: "tts-1",
+    voice: "alloy",
+    input: text,
+  });
+  return Buffer.from(await speech.arrayBuffer());
+}
