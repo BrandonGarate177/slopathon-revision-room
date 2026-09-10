@@ -2,7 +2,7 @@
 
 ## 1. What this is
 
-**Revision Room** lets a Business Bangerz client talk back to a draft banger while it plays, and turns what they say into a timestamped, prioritized revision sheet the writer can act on. The client holds a key, says "verse two feels corny" at 0:47, and the sheet already knows which verse, what kind of problem, and how much it matters.
+**Revision Room** lets a Business Bangerz client talk back to a draft banger while it plays, and turns what they say into a timestamped, prioritized revision sheet the writer can act on. The client presses record, the song plays straight through, they react out loud, and the sheet already knows that "verse two feels corny" was said at 0:47, which verse that is, what kind of problem it is, and how much it matters.
 
 ## 2. The outcome it targets
 
@@ -14,7 +14,8 @@ Today feedback on a draft arrives as a paragraph of email: untimestamped, unprio
 
 Real, running in this repo:
 
-- Push-to-talk audio capture in the browser while the draft plays, stamped with the playback position where the client started talking (MR-1, MR-2).
+- **Reaction track:** one continuous recording while the draft plays start to finish, no pauses. The transcription's segment timestamps place every remark on the song timeline (MR-1, MR-2, OR-1).
+- **Push-to-talk notes:** hold a key, say one thing, the note is stamped with the playback position where the client started talking (MR-1, MR-2).
 - Speech-to-text of each note with Whisper (OR-1).
 - Structuring each note into section, category, one-line production note, and priority with a language model (MR-3).
 - One clarifying question, spoken aloud, when a note is too vague to act on; the client's next push-to-talk answers it and the note is updated (OR-3, OR-2).
@@ -27,6 +28,7 @@ Stubbed, mocked, or not built:
 
 - **Demo mode notes are fixtures.** With `REVISION_ROOM_DEMO_MODE=1` or no `OPENAI_API_KEY`, the microphone still records but the transcript and structured note come from `fixtures/session.json`, not from the audio. Live mode calls the real APIs.
 - **Nothing is saved.** Notes live in the browser tab. Writing the sheet to Supabase next to the existing song record is described in section 7, not built.
+- **The reaction track hears the song too.** Browser echo cancellation handles most of it; headphones make it clean. Segment timestamps are Whisper's, accurate to about a second.
 - **Section detection is a guess** from the words and the timestamp. There is no song-structure map.
 - **No hummed-reference clips.** The client can talk; a hummed alternative is not yet attached to the note.
 - **No writer-side view.** The writer gets the JSON, not a UI.
@@ -34,8 +36,8 @@ Stubbed, mocked, or not built:
 ## 4. How it works
 
 1. The client opens the Revision Room for one draft and presses play.
-2. They hold the space bar (or the button) and say what they hear. Playback pauses and the moment they started talking is stamped on the note.
-3. The recording is transcribed to text.
+2. Either they record a reaction track (the song plays through, they talk over it, and each transcribed segment is stamped with its position in the song), or they hold the space bar and drop one note at a time (playback pauses and the moment they started talking is stamped on the note).
+3. The recording is transcribed to text, with segment timestamps for the reaction track.
 4. The transcript, the timestamp, and the song context go to a language model that returns a structured revision note: which section, what category (lyric, vocal, instrumentation, mix, structure), a one-sentence production note in the writer's language, and a priority (must-fix, nice-to-have, unclear).
 5. If the note cannot be acted on without one more fact, the agent asks one clarifying question out loud. The client's next push-to-talk is treated as the answer, and the note is updated in place.
 6. When the client finishes, every note is sorted by priority and time into a revision sheet, the agent reads the must-fix list back for confirmation, and the sheet is available as JSON for the writer's next generation pass.
@@ -56,7 +58,7 @@ npm run demo        # offline, fixtures, no key
 npm run start:live  # live, needs OPENAI_API_KEY in .env.local
 ```
 
-Open http://localhost:3000, press play, hold space, talk, release. Say something vague to get a clarifying question. Click **Finish session** to get the revision sheet and hear it read back. A pre-baked sheet from the fixture session is in `fixtures/revision-sheet.json`.
+Open http://localhost:3000. Click **Record reaction track**, talk over the song, click stop (or let it end). Or press play, hold space, talk, release. Say something vague to get a clarifying question. Click **Finish session** to get the revision sheet and hear it read back. A pre-baked sheet from the fixture session is in `fixtures/revision-sheet.json`.
 
 ## 7. What you did not build, and why
 
