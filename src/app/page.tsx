@@ -20,6 +20,21 @@ export default function RevisionRoom() {
   const [sheet, setSheet] = useState<RevisionSheet | null>(null);
   const [demo, setDemo] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [time, setTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  // Deterministic waveform bars so the timeline reads as a song, not a progress bar.
+  const bars = Array.from({ length: 48 }, (_, i) => 22 + Math.round(60 * Math.abs(Math.sin(i * 1.7) * Math.cos(i * 0.6))));
+  const pct = (sec: number) => (duration ? Math.min(100, (sec / duration) * 100) : 0);
+  const priClass = (n: RevisionNote) => (n.vague ? "word" : n.priority === "must-fix" ? "must" : n.priority === "nice-to-have" ? "nice" : "unclear");
+  const priLabel = (n: RevisionNote) => (n.vague ? "needs a word" : n.priority === "must-fix" ? "must fix" : n.priority === "nice-to-have" ? "nice to have" : "unclear");
+  const seek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = audioRef.current;
+    if (!el || !duration) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    el.currentTime = ((e.clientX - r.left) / r.width) * duration;
+  };
+  const needsWord = notes.filter((n) => n.vague).length;
+
 
   const speak = useCallback((text: string, dataUrl?: string | null) => {
     if (dataUrl) {
@@ -200,99 +215,124 @@ export default function RevisionRoom() {
   };
 
   return (
-    <main className="mx-auto max-w-3xl p-6 space-y-6 font-sans">
-      <header className="space-y-1">
-        <p className="text-xs uppercase tracking-widest text-neutral-500">Business Bangerz · Revision Room</p>
-        <h1 className="text-3xl font-bold">Talk back to the draft.</h1>
-        <p className="text-neutral-600">
-          Two ways in. Hold <kbd className="rounded border px-1">space</kbd> to drop a note where you are. Or record a reaction track: the song plays straight through, you talk over it, every remark lands on the timeline.
-          {demo !== null && (
-            <span className="ml-2 rounded bg-neutral-200 px-2 py-0.5 text-xs">{demo ? "offline demo mode" : "live"}</span>
-          )}
+    <main className="wrap">
+      <header>
+        <div className="eyebrow">
+          Business Bangerz · Revision Room
+          {demo !== null && <span className={`pill ${demo ? "" : "live"}`}>{demo ? "offline demo" : "live"}</span>}
+        </div>
+        <h1>Talk back to the draft.</h1>
+        <p className="lede">
+          Press record. The song plays straight through, you say what you hear, and every remark lands on the timeline. Or hold{" "}
+          <kbd>space</kbd> to drop one note right where you are.
         </p>
       </header>
 
-      <section className="rounded-lg border p-4 space-y-3">
-        <p className="font-medium">{SONG}</p>
-        <audio ref={audioRef} src={SRC} controls className="w-full" />
-        <div className="flex items-center gap-3">
+      <section className="player" aria-label="Draft player">
+        <div className="song">
+          <span className="t">{SONG}</span>
+          <span className="m">{formatTime(time)} / {formatTime(duration)}</span>
+        </div>
+        <div className="timeline" onClick={seek} aria-hidden="true">
+          {bars.map((h, i) => (
+            <i key={i} className={pct(time) > (i / bars.length) * 100 ? "p" : ""} style={{ height: `${h}%` }} />
+          ))}
+          <span className="head" data-t={formatTime(time)} style={{ left: `${pct(time)}%` }} />
+          {notes.map((n) => (
+            <span key={n.id} className={`dot ${priClass(n)}`} style={{ left: `${pct(n.timestamp_seconds)}%` }} title={n.timestamp_label} />
+          ))}
+        </div>
+        <audio
+          ref={audioRef}
+          src={SRC}
+          controls
+          onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+          onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        />
+        <div className="controls">
           <button
+            className={`btn ${status === "reacting" ? "hot" : "rec"}`}
+            onClick={status === "reacting" ? finishReaction : startReaction}
+            disabled={(status !== "idle" && status !== "reacting") || !!sheet}
+          >
+            <span className="o" />
+            {status === "reacting" ? "Stop reaction track" : "Record reaction track"}
+          </button>
+          <button
+            className={`btn ${status === "recording" ? "hot" : ""}`}
             onKeyDown={(e) => e.code === "Space" && e.preventDefault()}
             onMouseDown={startRecording}
             onMouseUp={stopRecording}
             onTouchStart={startRecording}
             onTouchEnd={stopRecording}
             disabled={status === "thinking" || status === "reacting" || !!sheet}
-            className={`rounded-full px-6 py-3 font-semibold text-white ${
-              status === "recording" ? "bg-red-600" : "bg-black"
-            } disabled:opacity-40`}
           >
             {status === "recording" ? "Listening…" : status === "thinking" ? "Writing the note…" : "Hold to talk"}
           </button>
-          <button
-            onClick={status === "reacting" ? finishReaction : startReaction}
-            disabled={(status !== "idle" && status !== "reacting") || !!sheet}
-            className={`rounded-full px-6 py-3 font-semibold ${
-              status === "reacting" ? "bg-red-600 text-white" : "border"
-            } disabled:opacity-40`}
-          >
-            {status === "reacting" ? "Stop reaction track" : "Record reaction track"}
-          </button>
-          <button
-            onClick={finish}
-            disabled={notes.length === 0 || status !== "idle" || !!sheet}
-            className="rounded-full border px-6 py-3 font-semibold disabled:opacity-40"
-          >
+          <button className="btn ghost" onClick={finish} disabled={notes.length === 0 || status !== "idle" || !!sheet}>
             Finish session
           </button>
+          <span className="hint">
+            {notes.length} note{notes.length === 1 ? "" : "s"}{needsWord ? ` · ${needsWord} needs a word` : ""}
+          </span>
         </div>
         {pending && (
-          <p className="rounded bg-amber-50 p-3 text-amber-900">
-            <span className="font-semibold">Agent:</span> {pending.clarifying_question}{" "}
-            <span className="text-sm text-amber-700">(hold to answer)</span>
-          </p>
+          <div className="callout" role="status">
+            <span className="who">Agent asks</span>
+            <span className="q">{pending.clarifying_question}</span>
+            <span className="how">Just answer out loud. Hold to talk, and the note at {pending.timestamp_label} updates itself.</span>
+          </div>
         )}
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="err">{error}</p>}
       </section>
 
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">Notes on the timeline</h2>
-        {notes.length === 0 && <p className="text-neutral-500">No notes yet.</p>}
-        <ul className="space-y-2">
+      <section className="sec" aria-label="Notes on the timeline">
+        <h2>On the timeline</h2>
+        {notes.length === 0 && <p className="empty">No notes yet. Press record and say what you hear.</p>}
+        <ul className="notes">
           {notes.map((n) => (
-            <li key={n.id} className="rounded border p-3">
-              <div className="flex items-center gap-2 text-sm">
-                <span className="font-mono">{n.timestamp_label}</span>
-                <span className="rounded bg-neutral-100 px-2">{n.section}</span>
-                <span className="rounded bg-neutral-100 px-2">{n.category}</span>
-                <span
-                  className={`rounded px-2 text-white ${
-                    n.priority === "must-fix" ? "bg-red-600" : n.priority === "nice-to-have" ? "bg-emerald-600" : "bg-neutral-500"
-                  }`}
-                >
-                  {n.vague ? "needs a word" : n.priority}
-                </span>
+            <li key={n.id} className="note">
+              <span className="ts">{n.timestamp_label}</span>
+              <div className="body">
+                <div className="chips">
+                  <span className="chip">{n.section}</span>
+                  <span className="chip">{n.category}</span>
+                  <span className={`chip pri ${priClass(n)}`}>{priLabel(n)}</span>
+                </div>
+                <div className="pn">{n.production_note}</div>
+                <div className="qt">
+                  “{n.transcript}”{n.clarification ? <> → <span>“{n.clarification}”</span></> : null}
+                </div>
               </div>
-              <p className="mt-1 font-medium">{n.production_note}</p>
-              <p className="text-sm text-neutral-500">“{n.transcript}”{n.clarification ? ` → “${n.clarification}”` : ""}</p>
             </li>
           ))}
         </ul>
       </section>
 
       {sheet && (
-        <section className="rounded-lg border bg-neutral-50 p-4 space-y-3">
-          <h2 className="text-lg font-semibold">Revision sheet</h2>
-          <p>{sheet.summary}</p>
-          <p className="text-sm text-neutral-600">{sheet.readback_text}</p>
-          <p className="text-xs text-neutral-500">Estimated cost of this session: ${sheet.cost_estimate_usd}</p>
-          <div className="flex gap-3">
-            <button onClick={download} className="rounded-full bg-black px-5 py-2 text-white">Download JSON</button>
-            <button onClick={() => speak(sheet.readback_text)} className="rounded-full border px-5 py-2">Play read-back</button>
+        <section className="sheet" aria-label="Revision sheet">
+          <div className="top">
+            <h2>Revision sheet</h2>
+            <span className="cost">session cost ≈ ${sheet.cost_estimate_usd} · {notes.length} notes</span>
           </div>
-          <pre className="max-h-80 overflow-auto rounded bg-white p-3 text-xs">{JSON.stringify(sheet, null, 2)}</pre>
+          <div className="tally">
+            <div className="must"><span className="n">{sheet.must_fix.length}</span><span className="l">must fix</span></div>
+            <div className="nice"><span className="n">{sheet.nice_to_have.length}</span><span className="l">nice to have</span></div>
+            <div className="word"><span className="n">{sheet.unclear.length}</span><span className="l">still unclear</span></div>
+          </div>
+          <p className="readback"><b>Read-back:</b> {sheet.readback_text}</p>
+          <div className="controls">
+            <button className="btn solid" onClick={download}>Download JSON</button>
+            <button className="btn" onClick={() => speak(sheet.readback_text)}>Play read-back</button>
+          </div>
+          <pre className="json">{JSON.stringify(sheet, null, 2)}</pre>
         </section>
       )}
     </main>
   );
+}
+
+function formatTime(s: number) {
+  if (!Number.isFinite(s)) return "0:00";
+  return `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
 }
