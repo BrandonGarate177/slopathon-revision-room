@@ -13,6 +13,7 @@ export default function RevisionRoom() {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const startedAtRef = useRef(0);
+  const holdStartedRef = useRef(0);
   const [status, setStatus] = useState<Status>("idle");
   const [notes, setNotes] = useState<RevisionNote[]>([]);
   const [pending, setPending] = useState<RevisionNote | null>(null);
@@ -35,13 +36,17 @@ export default function RevisionRoom() {
     if (status !== "idle" || sheet) return;
     setError(null);
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const rec = new MediaRecorder(stream, { mimeType: "audio/webm" });
+    const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((m) =>
+      MediaRecorder.isTypeSupported(m),
+    );
+    const rec = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
     chunksRef.current = [];
     rec.ondataavailable = (e) => chunksRef.current.push(e.data);
     rec.start();
     recorderRef.current = rec;
     // Stamp the note with where the client was in the draft when they started talking.
     startedAtRef.current = audioRef.current?.currentTime ?? 0;
+    holdStartedRef.current = Date.now();
     audioRef.current?.pause();
     setStatus("recording");
   }, [status, sheet]);
@@ -55,7 +60,13 @@ export default function RevisionRoom() {
       rec.stop();
     });
     rec.stream.getTracks().forEach((t) => t.stop());
-    const audio = new Blob(chunksRef.current, { type: "audio/webm" });
+    const audio = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
+    // A tap instead of a hold gives a blob with no audio frames; ask for a real note instead of calling the API.
+    if (Date.now() - holdStartedRef.current < 600 || audio.size < 2000) {
+      setError("Hold the button while you talk, then let go.");
+      setStatus("idle");
+      return;
+    }
 
     const form = new FormData();
     form.append("audio", audio, "note.webm");
@@ -150,6 +161,7 @@ export default function RevisionRoom() {
         <audio ref={audioRef} src={SRC} controls className="w-full" />
         <div className="flex items-center gap-3">
           <button
+            onKeyDown={(e) => e.code === "Space" && e.preventDefault()}
             onMouseDown={startRecording}
             onMouseUp={stopRecording}
             onTouchStart={startRecording}

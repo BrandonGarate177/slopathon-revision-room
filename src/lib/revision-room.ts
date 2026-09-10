@@ -8,7 +8,7 @@
  * (when vague) answered with one clarifying question. The session ends as a
  * machine-readable revision sheet the writer can act on directly.
  */
-import OpenAI from "openai";
+import OpenAI, { toFile } from "openai";
 
 export type Priority = "must-fix" | "nice-to-have" | "unclear";
 export type Category =
@@ -73,8 +73,9 @@ export function formatTimestamp(seconds: number): string {
 export async function transcribeSpokenFeedback(
   audio: File | Blob,
 ): Promise<string> {
-  const file =
-    audio instanceof File ? audio : new File([audio], "note.webm", { type: "audio/webm" });
+  const mime = audio.type || "audio/webm";
+  const ext = mime.includes("mp4") ? "mp4" : mime.includes("ogg") ? "ogg" : "webm";
+  const file = await toFile(Buffer.from(await audio.arrayBuffer()), `note.${ext}`, { type: mime });
   const result = await client().audio.transcriptions.create({
     model: "whisper-1",
     file,
