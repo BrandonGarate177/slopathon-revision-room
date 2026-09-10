@@ -4,8 +4,6 @@ node_modules
 .env.local
 .env*.local
 docs/
-public/audio/
-*.mp3
 *.wav
 *.m4a
 *.webm
@@ -16,3 +14,4 @@ CLAUDE.md
 sessions/
 .claude/
 tsconfig.tsbuildinfo
+!public/audio/clarity-principle.mp3

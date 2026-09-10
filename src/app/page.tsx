@@ -6,7 +6,8 @@ import example from "../../fixtures/example-session.json";
 import cueFixture from "../../fixtures/cues.json";
 
 const SONG = "The Clarity Principle";
-const SRC = "/audio/clarity-principle.mp3";
+// Override with NEXT_PUBLIC_SONG_URL to stream the draft from Supabase storage instead of the bundled file.
+const SRC = process.env.NEXT_PUBLIC_SONG_URL ?? "/audio/clarity-principle.mp3";
 const SONG_ID = "clarity-principle";
 // Brief-derived cues, hand-written for now. Later: a `cues` column on the song record.
 const CUES = cueFixture.cues as Cue[];
