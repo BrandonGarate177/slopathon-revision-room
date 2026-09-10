@@ -13,6 +13,4 @@ public/audio/
 
 AGENTS.md
 CLAUDE.md
-.claude/
 sessions/
-tsconfig.tsbuildinfo
