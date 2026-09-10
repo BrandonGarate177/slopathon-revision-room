@@ -332,7 +332,7 @@ export default function RevisionRoom() {
     <main className="wrap">
       <header>
         <div className="eyebrow">
-          Business Bangerz · Revision Room
+          Bangerz Studio Revisions
           {demo !== null && <span className={`pill ${demo ? "" : "live"}`}>{demo ? "offline demo" : "live"}</span>}
         </div>
         {isClient ? (
