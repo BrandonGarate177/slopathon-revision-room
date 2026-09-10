@@ -439,9 +439,15 @@ export default function RevisionRoom() {
           <button className="btn ghost" onClick={() => finish()} disabled={notes.length === 0 || status !== "idle" || !!sheet}>
             Finish session
           </button>
-          <button className="btn ghost" onClick={sheet || notes.length ? clearSession : showExample} disabled={status !== "idle"}>
-            {sheet || notes.length ? "Clear" : "Show example session"}
-          </button>
+          {sheet || notes.length ? (
+            <button className="btn ghost" onClick={clearSession} disabled={status !== "idle"}>
+              Clear
+            </button>
+          ) : (
+            <button className="btn solid" onClick={showExample} disabled={status !== "idle"}>
+              See a finished review →
+            </button>
+          )}
           <button className="btn ghost" onClick={copyLink} title="Client-mode link for the delivery email">
             Copy review link
           </button>
