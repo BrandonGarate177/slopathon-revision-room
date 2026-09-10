@@ -1,0 +1,65 @@
+{
+  "song": "The Clarity Principle",
+  "created_at": "2026-09-10T02:11:13.050Z",
+  "summary": "1 must-fix, 2 nice-to-have, 1 still unclear across 4 timestamped notes.",
+  "must_fix": [
+    {
+      "id": "fx-3",
+      "timestamp_seconds": 71,
+      "timestamp_label": "1:11",
+      "transcript": "The chorus has to say eighty twenty, that's the whole point, people need to hear the number.",
+      "section": "Chorus",
+      "category": "lyric",
+      "production_note": "Chorus must state the 80/20 split explicitly; it is the required message.",
+      "priority": "must-fix",
+      "vague": false,
+      "clarifying_question": null,
+      "clarification": null
+    }
+  ],
+  "nice_to_have": [
+    {
+      "id": "fx-1",
+      "timestamp_seconds": 14,
+      "timestamp_label": "0:14",
+      "transcript": "Okay the intro is great, love the energy, keep this exactly.",
+      "section": "Intro",
+      "category": "other",
+      "production_note": "Keep the intro as is; client explicitly approves the energy.",
+      "priority": "nice-to-have",
+      "vague": false,
+      "clarifying_question": null,
+      "clarification": null
+    },
+    {
+      "id": "fx-4",
+      "timestamp_seconds": 98,
+      "timestamp_label": "1:38",
+      "transcript": "Drums here are a bit much, could be softer, not a big deal.",
+      "section": "Bridge",
+      "category": "mix",
+      "production_note": "Pull the drums back in the bridge; lower priority preference.",
+      "priority": "nice-to-have",
+      "vague": false,
+      "clarifying_question": null,
+      "clarification": null
+    }
+  ],
+  "unclear": [
+    {
+      "id": "fx-2",
+      "timestamp_seconds": 47,
+      "timestamp_label": "0:47",
+      "transcript": "Verse two feels corny, I don't know, something about it.",
+      "section": "Verse 2",
+      "category": "lyric",
+      "production_note": "Verse 2 reads as corny; needs a rewrite or a delivery change.",
+      "priority": "must-fix",
+      "vague": true,
+      "clarifying_question": "Got it. Is it the words in verse two, or the way they're sung?",
+      "clarification": null
+    }
+  ],
+  "readback_text": "Here is what I have for The Clarity Principle. Must fix: at 1:11, Chorus must state the 80/20 split explicitly; it is the required message.. Nice to have: at 0:14, Keep the intro as is; client explicitly approves the energy.. at 1:38, Pull the drums back in the bridge; lower priority preference.. I still need a word on 1 note. Sending this to the writer now.",
+  "cost_estimate_usd": 0.0106
+}

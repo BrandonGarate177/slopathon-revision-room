@@ -10,3 +10,6 @@ public/audio/
 *.m4a
 *.webm
 .DS_Store
+
+AGENTS.md
+CLAUDE.md
