@@ -69,7 +69,12 @@ export default function RevisionRoom() {
   const needsWord = notes.filter((n) => n.vague).length;
   // Guided Listen: the cue whose window playback is inside, and every cue already passed.
   const activeCue = CUES.find((c) => time >= c.at && time < cueEnd(c)) ?? null;
-  const pastCues = CUES.filter((c) => time >= cueEnd(c));
+  // A cue is "past" once the playhead has left it, once a note landed inside it, or once the session is done.
+  const pastCues = CUES.filter(
+    (c) =>
+      (time >= cueEnd(c) || !!sheet || notes.some((n) => n.timestamp_seconds >= c.at && n.timestamp_seconds < cueEnd(c))) &&
+      c !== activeCue,
+  );
   const noteForCue = (c: Cue) =>
     notes.find((n) => n.cue_id === c.id) ??
     notes.find((n) => n.timestamp_seconds >= c.at && n.timestamp_seconds < cueEnd(c)) ??
