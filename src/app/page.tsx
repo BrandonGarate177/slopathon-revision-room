@@ -248,6 +248,8 @@ export default function RevisionRoom() {
           controls
           onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
           onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+          onDurationChange={(e) => setDuration(e.currentTarget.duration)}
+          onCanPlay={(e) => setDuration(e.currentTarget.duration)}
         />
         <div className="controls">
           <button
