@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.env
+.env.local
+.env*.local
+docs/
+public/audio/
+*.mp3
+*.wav
+*.m4a
+*.webm
+.DS_Store
