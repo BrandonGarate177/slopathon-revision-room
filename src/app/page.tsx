@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RevisionNote, RevisionSheet } from "@/lib/revision-room";
+import example from "../../fixtures/example-session.json";
 
 const SONG = "The Clarity Principle";
 const SRC = "/audio/clarity-principle.mp3";
@@ -205,6 +206,30 @@ export default function RevisionRoom() {
     setStatus("idle");
   };
 
+  // Example session: a full fictional client review, loaded in one click for the demo.
+  const showExample = async () => {
+    const exNotes = example.notes as RevisionNote[];
+    setNotes(exNotes);
+    setPending(null);
+    setError(null);
+    setStatus("thinking");
+    const res = await fetch("/api/sheet", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ song: SONG, notes: exNotes }),
+    });
+    const data = (await res.json()) as { sheet: RevisionSheet; readback_audio: string | null; demo: boolean };
+    setSheet(data.sheet);
+    setStatus("idle");
+  };
+
+  const clearSession = () => {
+    setNotes([]);
+    setSheet(null);
+    setPending(null);
+    setError(null);
+  };
+
   const download = () => {
     if (!sheet) return;
     const blob = new Blob([JSON.stringify(sheet, null, 2)], { type: "application/json" });
@@ -273,6 +298,9 @@ export default function RevisionRoom() {
           </button>
           <button className="btn ghost" onClick={finish} disabled={notes.length === 0 || status !== "idle" || !!sheet}>
             Finish session
+          </button>
+          <button className="btn ghost" onClick={sheet || notes.length ? clearSession : showExample} disabled={status !== "idle"}>
+            {sheet || notes.length ? "Clear" : "Show example session"}
           </button>
           <span className="hint">
             {notes.length} note{notes.length === 1 ? "" : "s"}{needsWord ? ` · ${needsWord} needs a word` : ""}
