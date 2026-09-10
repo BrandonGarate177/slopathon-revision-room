@@ -82,8 +82,10 @@ pre.json{max-height:320px;overflow:auto;background:var(--bg);border:1px solid va
 
 /* Guided Listen: brief cues beside the player */
 .stage{display:grid;gap:16px}
-@media (min-width:800px){.stage{grid-template-columns:minmax(0,1fr) 300px;align-items:start}}
-.cues{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;display:grid;gap:12px;align-content:start}
+@media (min-width:800px){.stage{grid-template-columns:minmax(0,1fr) 300px;align-items:stretch}}
+/* The cue panel never grows the row: it fills the player's height and scrolls inside. */
+.cues{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-height:0;overflow:hidden;max-height:360px}
+@media (min-width:800px){.cues{height:0;min-height:100%;max-height:none}}
 .cues h2{font-size:14px}
 .cues .empty{margin:0}
 .cue{display:grid;gap:8px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel2)}
@@ -95,7 +97,7 @@ pre.json{max-height:320px;overflow:auto;background:var(--bg);border:1px solid va
 .chip.kind.required{background:var(--must)}.chip.kind.lyric{background:var(--word)}.chip.kind.vibe{background:var(--accent)}.chip.kind.mix{background:var(--nice)}.chip.kind.pronunciation{background:var(--word)}
 .drain{height:3px;background:var(--line);border-radius:2px;overflow:hidden}
 .drain i{display:block;height:100%;background:var(--accent);transition:width .25s linear}
-.past{display:grid;gap:6px}
+.past{display:grid;gap:6px;overflow-y:auto;min-height:0;flex:1;padding-right:4px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
 .past .cue{padding:8px 12px;gap:4px}
 .past .cue .q{font-size:13px;color:var(--muted);font-weight:400}
 .dot.cue{background:transparent;border:2px solid var(--muted);width:10px;height:10px;bottom:1px}
