@@ -239,3 +239,40 @@ export async function structureReactionTrack(
     segments.map((s) => structureRevisionNote({ transcript: s.text, timestamp_seconds: s.start })),
   );
 }
+
+// Async review link: finished sessions land on disk so the founder has something to open
+// without being on the call. Supabase replaces this once revision_sessions exists.
+export async function logReviewEvent(event: string, data: Record<string, unknown> = {}): Promise<void> {
+  const { mkdir, appendFile } = await import("node:fs/promises");
+  const path = await import("node:path");
+  const dir = path.join(process.cwd(), "sessions");
+  await mkdir(dir, { recursive: true });
+  const line = JSON.stringify({ event, at: new Date().toISOString(), ...data });
+  await appendFile(path.join(dir, "events.jsonl"), line + "\n");
+}
+
+export async function saveRevisionSession(
+  sheet: RevisionSheet,
+  meta: { mode: string; song: string },
+): Promise<string> {
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const path = await import("node:path");
+  const dir = path.join(process.cwd(), "sessions");
+  await mkdir(dir, { recursive: true });
+  const finishedAt = new Date().toISOString();
+  const file = path.join(dir, `${finishedAt.replace(/[:.]/g, "-")}.json`);
+  const session = {
+    id: finishedAt,
+    song_id: meta.song,
+    client_name: null,
+    mode: meta.mode,
+    consent: meta.mode === "client" ? { accepted_at: finishedAt, retention_days: 30 } : null,
+    created_at: finishedAt,
+    finished_at: finishedAt,
+    sheet,
+  };
+  await writeFile(file, JSON.stringify(session, null, 2));
+  const noteCount = sheet.must_fix.length + sheet.nice_to_have.length + sheet.unclear.length;
+  await logReviewEvent("session_finished", { song: meta.song, mode: meta.mode, file: path.basename(file), notes: noteCount });
+  return file;
+}

@@ -40,6 +40,12 @@ audio{width:100%;height:36px;filter:invert(.92) hue-rotate(180deg) saturate(.6)}
 .btn.ghost{color:var(--muted)}
 .btn.solid{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .hint{font-size:13px;color:var(--muted);margin-left:auto}
+/* Async review link: client landing, closing card, copy toast */
+.landing{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px 24px;display:grid;gap:14px}
+.landing .consent{font-family:var(--mono);font-size:12px;color:var(--dim);max-width:60ch;margin:0}
+.closing{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:14px;padding:22px 24px;display:grid;gap:6px}
+.closing p{margin:0;color:var(--muted)}
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--ink);color:var(--bg);border-radius:999px;padding:10px 18px;font-size:14px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.4);z-index:10}
 .err{font-size:13px;color:var(--must)}
 .callout{background:#2B2313;border:1px solid #5A4718;border-left:4px solid var(--word);border-radius:10px;padding:12px 14px;display:grid;gap:4px}
 .callout .who{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--word)}

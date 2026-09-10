@@ -5,6 +5,7 @@ import type { RevisionNote, RevisionSheet } from "@/lib/revision-room";
 
 const SONG = "The Clarity Principle";
 const SRC = "/audio/clarity-principle.mp3";
+const SONG_ID = "clarity-principle";
 
 type Status = "idle" | "recording" | "reacting" | "thinking";
 
@@ -22,6 +23,32 @@ export default function RevisionRoom() {
   const [error, setError] = useState<string | null>(null);
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  // Async review link: ?mode=client opens the same page for the client alone.
+  const [mode, setMode] = useState<"founder" | "client">("founder");
+  const [started, setStarted] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const isClient = mode === "client";
+  useEffect(() => {
+    // Deferred so the server-rendered founder view hydrates cleanly before the URL flips it.
+    const t = setTimeout(() => {
+      if (new URLSearchParams(window.location.search).get("mode") === "client") setMode("client");
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2800);
+    return () => clearTimeout(t);
+  }, [toast]);
+  useEffect(() => {
+    if (!isClient || status !== "reacting") return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [isClient, status]);
   // Deterministic waveform bars so the timeline reads as a song, not a progress bar.
   const bars = Array.from({ length: 48 }, (_, i) => 22 + Math.round(60 * Math.abs(Math.sin(i * 1.7) * Math.cos(i * 0.6))));
   const pct = (sec: number) => (duration ? Math.min(100, (sec / duration) * 100) : 0);
@@ -138,11 +165,13 @@ export default function RevisionRoom() {
       if (data.error) throw new Error(data.error);
       setDemo(data.demo);
       setNotes((prev) => [...prev, ...data.notes]);
+      return data.notes;
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setStatus("idle");
     }
+    return [];
   }, []);
 
   const startReaction = useCallback(async () => {
@@ -170,6 +199,7 @@ export default function RevisionRoom() {
 
   // Hold the space bar to talk, like a walkie-talkie.
   useEffect(() => {
+    if (isClient) return; // no push-to-talk in client mode
     const down = (e: KeyboardEvent) => {
       if (e.code === "Space" && !e.repeat) {
         e.preventDefault();
@@ -188,21 +218,59 @@ export default function RevisionRoom() {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
     };
-  }, [startRecording, stopRecording]);
+  }, [startRecording, stopRecording, isClient]);
 
-  const finish = async () => {
+  // `extra` carries notes that finishReaction just returned; React state hasn't caught up in the same tick.
+  const finish = async (extra: RevisionNote[] = []) => {
     setStatus("thinking");
     audioRef.current?.pause();
     const res = await fetch("/api/sheet", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ song: SONG, notes }),
+      body: JSON.stringify({ song: SONG, notes: [...notes, ...extra], mode, song_id: SONG_ID }),
     });
     const data = (await res.json()) as { sheet: RevisionSheet; readback_audio: string | null; demo: boolean };
     setSheet(data.sheet);
     setDemo(data.demo);
     speak(data.sheet.readback_text, data.readback_audio);
     setStatus("idle");
+  };
+
+  const logEvent = (event: string, data: Record<string, unknown> = {}) =>
+    fetch("/api/events", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ event, song: SONG_ID, ...data }),
+    }).catch(() => {});
+
+  const copyLink = async () => {
+    const url = `${window.location.origin}/?mode=client&song=${SONG_ID}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setToast("Link copied. Send it in the delivery email.");
+    } catch {
+      setToast(url);
+    }
+    logEvent("link_created");
+  };
+
+  // Client mode: mic permission is asked for on Start, not on load. Song plays from 0:00.
+  const startClient = async () => {
+    const el = audioRef.current;
+    if (el) el.currentTime = 0;
+    setStarted(true);
+    logEvent("session_started", { mode: "client" });
+    try {
+      await startReaction();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setStarted(false);
+    }
+  };
+
+  const clientDone = async () => {
+    const fresh = status === "reacting" ? await finishReaction() : [];
+    await finish(fresh ?? []);
   };
 
   const download = () => {
@@ -221,14 +289,49 @@ export default function RevisionRoom() {
           Business Bangerz · Revision Room
           {demo !== null && <span className={`pill ${demo ? "" : "live"}`}>{demo ? "offline demo" : "live"}</span>}
         </div>
-        <h1>Talk back to the draft.</h1>
-        <p className="lede">
-          Press record. The song plays straight through, you say what you hear, and every remark lands on the timeline. Or hold{" "}
-          <kbd>space</kbd> to drop one note right where you are.
-        </p>
+        {isClient ? (
+          <>
+            <h1>{SONG}</h1>
+            <p className="lede">Matt sent you a draft. Press record, say what you hear, and you&apos;re done.</p>
+          </>
+        ) : (
+          <>
+            <h1>Talk back to the draft.</h1>
+            <p className="lede">
+              Press record. The song plays straight through, you say what you hear, and every remark lands on the timeline. Or hold{" "}
+              <kbd>space</kbd> to drop one note right where you are.
+            </p>
+          </>
+        )}
       </header>
 
-      <section className="player" aria-label="Draft player">
+      {isClient && !started && (
+        <section className="landing" aria-label="Start your review">
+          <h2>Ready when you are</h2>
+          <p className="lede">
+            The song plays from the top. Talk over it like Matt is in the room: what you like, what&apos;s off, what you&apos;d change. Press Done when it ends.
+          </p>
+          <p className="consent">
+            Your voice is used to write revision notes for this song, kept 30 days, delete any time.
+          </p>
+          <div className="controls">
+            <button className="btn rec" onClick={startClient}>
+              <span className="o" />
+              Start
+            </button>
+          </div>
+          {error && <p className="err">{error}</p>}
+        </section>
+      )}
+
+      {isClient && sheet && (
+        <section className="closing" aria-label="Sent">
+          <h2>Sent to Matt.</h2>
+          <p>You can close this tab. Here&apos;s what was captured, so you know it landed.</p>
+        </section>
+      )}
+
+      <section className="player" aria-label="Draft player" style={isClient && (!started || sheet) ? { display: "none" } : undefined}>
         <div className="song">
           <span className="t">{SONG}</span>
           <span className="m">{formatTime(time)} / {formatTime(duration)}</span>
@@ -251,6 +354,19 @@ export default function RevisionRoom() {
           onDurationChange={(e) => setDuration(e.currentTarget.duration)}
           onCanPlay={(e) => setDuration(e.currentTarget.duration)}
         />
+        {isClient ? (
+          <div className="controls">
+            {!sheet && (
+              <button className={`btn ${status === "reacting" ? "hot" : "rec"}`} onClick={clientDone} disabled={status === "thinking"}>
+                <span className="o" />
+                {status === "thinking" ? "Writing your notes…" : "Done"}
+              </button>
+            )}
+            <span className="hint">
+              {status === "reacting" ? "Listening. Talk whenever." : `${notes.length} note${notes.length === 1 ? "" : "s"}`}
+            </span>
+          </div>
+        ) : (
         <div className="controls">
           <button
             className={`btn ${status === "reacting" ? "hot" : "rec"}`}
@@ -271,13 +387,17 @@ export default function RevisionRoom() {
           >
             {status === "recording" ? "Listening…" : status === "thinking" ? "Writing the note…" : "Hold to talk"}
           </button>
-          <button className="btn ghost" onClick={finish} disabled={notes.length === 0 || status !== "idle" || !!sheet}>
+          <button className="btn ghost" onClick={() => finish()} disabled={notes.length === 0 || status !== "idle" || !!sheet}>
             Finish session
+          </button>
+          <button className="btn ghost" onClick={copyLink} title="Client-mode link for the delivery email">
+            Copy review link
           </button>
           <span className="hint">
             {notes.length} note{notes.length === 1 ? "" : "s"}{needsWord ? ` · ${needsWord} needs a word` : ""}
           </span>
         </div>
+        )}
         {pending && (
           <div className="callout" role="status">
             <span className="who">Agent asks</span>
@@ -288,7 +408,7 @@ export default function RevisionRoom() {
         {error && <p className="err">{error}</p>}
       </section>
 
-      <section className="sec" aria-label="Notes on the timeline">
+      <section className="sec" aria-label="Notes on the timeline" style={isClient && !started ? { display: "none" } : undefined}>
         <h2>On the timeline</h2>
         {notes.length === 0 && <p className="empty">No notes yet. Press record and say what you hear.</p>}
         <ul className="notes">
@@ -315,7 +435,7 @@ export default function RevisionRoom() {
         <section className="sheet" aria-label="Revision sheet">
           <div className="top">
             <h2>Revision sheet</h2>
-            <span className="cost">session cost ≈ ${sheet.cost_estimate_usd} · {notes.length} notes</span>
+            {!isClient && <span className="cost">session cost ≈ ${sheet.cost_estimate_usd} · {notes.length} notes</span>}
           </div>
           <div className="tally">
             <div className="must"><span className="n">{sheet.must_fix.length}</span><span className="l">must fix</span></div>
@@ -323,13 +443,18 @@ export default function RevisionRoom() {
             <div className="word"><span className="n">{sheet.unclear.length}</span><span className="l">still unclear</span></div>
           </div>
           <p className="readback"><b>Read-back:</b> {sheet.readback_text}</p>
-          <div className="controls">
-            <button className="btn solid" onClick={download}>Download JSON</button>
-            <button className="btn" onClick={() => speak(sheet.readback_text)}>Play read-back</button>
-          </div>
-          <pre className="json">{JSON.stringify(sheet, null, 2)}</pre>
+          {!isClient && (
+            <>
+              <div className="controls">
+                <button className="btn solid" onClick={download}>Download JSON</button>
+                <button className="btn" onClick={() => speak(sheet.readback_text)}>Play read-back</button>
+              </div>
+              <pre className="json">{JSON.stringify(sheet, null, 2)}</pre>
+            </>
+          )}
         </section>
       )}
+      {toast && <div className="toast" role="status">{toast}</div>}
     </main>
   );
 }
