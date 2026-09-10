@@ -204,3 +204,38 @@ export async function speakReadBack(text: string): Promise<Buffer> {
   });
   return Buffer.from(await speech.arrayBuffer());
 }
+
+/**
+ * Reaction track: the client talks over the whole draft without stopping the
+ * music, and the transcription's own segment timestamps place every remark on
+ * the song timeline (OR-1, MR-3). `offset_seconds` is where playback was when
+ * recording began, normally zero.
+ */
+export async function transcribeReactionTrack(
+  audio: File | Blob,
+  offset_seconds = 0,
+): Promise<Array<{ start: number; text: string }>> {
+  const mime = audio.type || "audio/webm";
+  const ext = mime.includes("mp4") ? "mp4" : mime.includes("ogg") ? "ogg" : "webm";
+  const file = await toFile(Buffer.from(await audio.arrayBuffer()), `reaction.${ext}`, { type: mime });
+  const result = await client().audio.transcriptions.create({
+    model: "whisper-1",
+    file,
+    response_format: "verbose_json",
+    prompt:
+      "A client reacting out loud to a draft song while it plays: chorus, verse, bridge, hook, drums, vocals, lyrics, corny, energy, love it, keep that.",
+  });
+  const segments = (result as unknown as { segments?: Array<{ start: number; text: string }> }).segments ?? [];
+  return segments
+    .map((s) => ({ start: s.start + offset_seconds, text: s.text.trim() }))
+    .filter((s) => s.text.length > 3);
+}
+
+/** Every reaction segment becomes one structured revision note. */
+export async function structureReactionTrack(
+  segments: Array<{ start: number; text: string }>,
+): Promise<RevisionNote[]> {
+  return Promise.all(
+    segments.map((s) => structureRevisionNote({ transcript: s.text, timestamp_seconds: s.start })),
+  );
+}

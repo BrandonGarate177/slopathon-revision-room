@@ -6,7 +6,7 @@ import type { RevisionNote, RevisionSheet } from "@/lib/revision-room";
 const SONG = "The Clarity Principle";
 const SRC = "/audio/clarity-principle.mp3";
 
-type Status = "idle" | "recording" | "thinking";
+type Status = "idle" | "recording" | "reacting" | "thinking";
 
 export default function RevisionRoom() {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -97,6 +97,62 @@ export default function RevisionRoom() {
     }
   }, [status, notes.length, pending, speak]);
 
+  // Reaction track: press once, the draft plays through, the client talks over it, nothing stops.
+  const reactionRef = useRef<MediaRecorder | null>(null);
+  const reactionChunksRef = useRef<Blob[]>([]);
+  const reactionOffsetRef = useRef(0);
+
+  const finishReaction = useCallback(async () => {
+    const rec = reactionRef.current;
+    if (!rec) return;
+    reactionRef.current = null;
+    setStatus("thinking");
+    audioRef.current?.pause();
+    await new Promise<void>((resolve) => {
+      rec.onstop = () => resolve();
+      rec.stop();
+    });
+    rec.stream.getTracks().forEach((t) => t.stop());
+    const audio = new Blob(reactionChunksRef.current, { type: rec.mimeType || "audio/webm" });
+    const form = new FormData();
+    form.append("audio", audio, "reaction.webm");
+    form.append("offset_seconds", String(reactionOffsetRef.current));
+    try {
+      const res = await fetch("/api/reaction", { method: "POST", body: form });
+      const data = (await res.json()) as { notes: RevisionNote[]; demo: boolean; error?: string };
+      if (data.error) throw new Error(data.error);
+      setDemo(data.demo);
+      setNotes((prev) => [...prev, ...data.notes]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStatus("idle");
+    }
+  }, []);
+
+  const startReaction = useCallback(async () => {
+    if (status !== "idle" || sheet) return;
+    setError(null);
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true },
+    });
+    const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((m) =>
+      MediaRecorder.isTypeSupported(m),
+    );
+    const rec = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    reactionChunksRef.current = [];
+    rec.ondataavailable = (e) => reactionChunksRef.current.push(e.data);
+    const el = audioRef.current;
+    reactionOffsetRef.current = el?.currentTime ?? 0;
+    rec.start(1000);
+    reactionRef.current = rec;
+    if (el) {
+      el.onended = () => finishReaction();
+      el.play();
+    }
+    setStatus("reacting");
+  }, [status, sheet, finishReaction]);
+
   // Hold the space bar to talk, like a walkie-talkie.
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -149,7 +205,7 @@ export default function RevisionRoom() {
         <p className="text-xs uppercase tracking-widest text-neutral-500">Business Bangerz · Revision Room</p>
         <h1 className="text-3xl font-bold">Talk back to the draft.</h1>
         <p className="text-neutral-600">
-          Play the draft. Hold <kbd className="rounded border px-1">space</kbd> and say what you hear. Every note lands on the timeline.
+          Two ways in. Hold <kbd className="rounded border px-1">space</kbd> to drop a note where you are. Or record a reaction track: the song plays straight through, you talk over it, every remark lands on the timeline.
           {demo !== null && (
             <span className="ml-2 rounded bg-neutral-200 px-2 py-0.5 text-xs">{demo ? "offline demo mode" : "live"}</span>
           )}
@@ -166,12 +222,21 @@ export default function RevisionRoom() {
             onMouseUp={stopRecording}
             onTouchStart={startRecording}
             onTouchEnd={stopRecording}
-            disabled={status === "thinking" || !!sheet}
+            disabled={status === "thinking" || status === "reacting" || !!sheet}
             className={`rounded-full px-6 py-3 font-semibold text-white ${
               status === "recording" ? "bg-red-600" : "bg-black"
             } disabled:opacity-40`}
           >
             {status === "recording" ? "Listening…" : status === "thinking" ? "Writing the note…" : "Hold to talk"}
+          </button>
+          <button
+            onClick={status === "reacting" ? finishReaction : startReaction}
+            disabled={(status !== "idle" && status !== "reacting") || !!sheet}
+            className={`rounded-full px-6 py-3 font-semibold ${
+              status === "reacting" ? "bg-red-600 text-white" : "border"
+            } disabled:opacity-40`}
+          >
+            {status === "reacting" ? "Stop reaction track" : "Record reaction track"}
           </button>
           <button
             onClick={finish}
