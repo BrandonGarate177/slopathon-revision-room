@@ -68,6 +68,8 @@ Stubbed, mocked, or not built:
 
 ![Client mode landing: song title, one paragraph of instruction, consent line, Start](screenshots/03-client-link.png)
 
+<img src="screenshots/05-client-phone.png" alt="The same client landing on a phone" width="300">
+
 1. The founder opens the draft in Revision Room and clicks **Copy review link**, or sits with the client and runs it live.
 2. The client presses **Start** (client mode) or **Record reaction track**. The song plays from the top. Cues from the brief appear beside the player as the song reaches them.
 3. The client talks over the song. When they stop or the song ends, the recording is transcribed with segment timestamps.
@@ -120,7 +122,8 @@ Cut on purpose:
 
 ## 9. Attribution
 
-- Next.js, React, and the `openai` SDK, all MIT or Apache licensed. Fonts: Archivo Black, IBM Plex Sans, IBM Plex Mono via Google Fonts, SIL Open Font License.
+- Next.js, React, and the `openai` SDK, all MIT or Apache licensed. Fonts: Libre Caslon Display, Geist, Geist Mono via Google Fonts, SIL Open Font License.
+- The painting behind the player is Caravaggio, The Musicians, 1597, from The Metropolitan Museum of Art's Open Access collection (CC0, object 435844).
 - The demo draft is "The Clarity Principle," an original Business Bangerz portfolio song from its public Jukebox, bundled here with Business Bangerz as the audience of this prototype. It is not client material.
 - The example client, Dana Okafor of Tidewater Biologics, is fictional.
 - No voices were cloned. The read-back uses a stock synthetic voice. All recorded speech is the presenter's own.
