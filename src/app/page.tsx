@@ -388,7 +388,8 @@ export default function RevisionRoom() {
             srcSet="/art/musicians-900.webp 900w, /art/musicians-1800.webp 1800w"
             sizes="(max-width: 860px) 100vw, 1180px"
             alt=""
-            loading="lazy"
+            loading="eager"
+            fetchPriority="high"
             decoding="async"
           />
 

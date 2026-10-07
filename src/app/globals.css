@@ -62,8 +62,8 @@ h1 em,h2 em{font-style:normal;color:var(--soft)}
 @keyframes pulse{50%{opacity:.35}}
 
 /* The painting layer: crisp cards float over an old master */
-.canvas{position:relative;border-radius:22px;overflow:hidden;padding:176px 40px 40px;background:#4a3324;box-shadow:0 30px 60px -30px rgba(43,29,18,.45);display:grid;gap:16px}
-.canvas .art{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 14%}
+.canvas{position:relative;border-radius:22px;overflow:hidden;padding:176px 40px 40px;background:#4a3324;box-shadow:0 30px 60px -30px rgba(43,29,18,.45);display:grid;gap:16px;isolation:isolate}
+.canvas .art{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 14%;z-index:-1}
 .canvas::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(20,15,10,0) 40%,rgba(20,15,10,.35))}
 .canvas > :not(.art){position:relative}
 .credit{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:-16px 4px 0;font:500 10.5px/1.4 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)}
