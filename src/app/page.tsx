@@ -39,6 +39,9 @@ export default function RevisionRoom() {
     // Deferred so the server-rendered founder view hydrates cleanly before the URL flips it.
     const t = setTimeout(() => {
       if (new URLSearchParams(window.location.search).get("mode") === "client") setMode("client");
+      // The audio metadata can load before hydration attaches onLoadedMetadata, which left the timeline at 0:00.
+      const el = audioRef.current;
+      if (el && el.readyState >= 1) setDuration(el.duration);
     }, 0);
     return () => clearTimeout(t);
   }, []);
@@ -329,263 +332,318 @@ export default function RevisionRoom() {
   };
 
   return (
-    <main className="wrap">
-      <header>
-        <div className="eyebrow">
-          Bangerz Studio Revisions
-          {demo !== null && <span className={`pill ${demo ? "" : "live"}`}>{demo ? "offline demo" : "live"}</span>}
-        </div>
-        {isClient ? (
-          <>
-            <h1>{SONG}</h1>
-            <p className="lede">Matt sent you a draft. Press record, say what you hear, and you&apos;re done.</p>
-          </>
-        ) : (
-          <>
-            <h1>Talk back to the draft.</h1>
-            <p className="lede">
-              Press record. The song plays straight through, you say what you hear, and every remark lands on the timeline. Or hold{" "}
-              <kbd>space</kbd> to drop one note right where you are.
-            </p>
-          </>
-        )}
-      </header>
-
-      {isClient && !started && (
-        <section className="landing" aria-label="Start your review">
-          <h2>Ready when you are</h2>
-          <p className="lede">
-            The song plays from the top. Talk over it like Matt is in the room: what you like, what&apos;s off, what you&apos;d change. Press Done when it ends.
-          </p>
-          <p className="consent">
-            Your voice is used to write revision notes for this song, kept 30 days, delete any time.
-          </p>
-          <div className="controls">
-            <button className="btn rec" onClick={startClient}>
-              <span className="o" />
-              Start
-            </button>
-          </div>
-          {error && <p className="err">{error}</p>}
-        </section>
-      )}
-
-      {isClient && sheet && (
-        <section className="closing" aria-label="Sent">
-          <h2>Sent to Matt.</h2>
-          <p>You can close this tab. Here&apos;s what was captured, so you know it landed.</p>
-        </section>
-      )}
-
-      <div className="stage" style={isClient && (!started || sheet) ? { display: "none" } : undefined}>
-      <section className="player" aria-label="Draft player">
-        <div className="song">
-          <span className="t">{SONG}</span>
-          <span className="m">{formatTime(time)} / {formatTime(duration)}</span>
-        </div>
-        <div className="timeline" onClick={seek} aria-hidden="true">
-          {bars.map((h, i) => (
-            <i key={i} className={pct(time) > (i / bars.length) * 100 ? "p" : ""} style={{ height: `${h}%` }} />
-          ))}
-          <span className="head" data-t={formatTime(time)} style={{ left: `${pct(time)}%` }} />
-          {CUES.map((c) => (
-            <span key={c.id} className={`dot cue ${c.kind}`} style={{ left: `${pct(c.at)}%` }} title={c.question} />
-          ))}
-          {notes.map((n) => (
-            <span key={n.id} className={`dot ${priClass(n)}`} style={{ left: `${pct(n.timestamp_seconds)}%` }} title={n.timestamp_label} />
-          ))}
-        </div>
-        <audio
-          ref={audioRef}
-          src={SRC}
-          controls
-          onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
-          onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
-          onDurationChange={(e) => setDuration(e.currentTarget.duration)}
-          onCanPlay={(e) => setDuration(e.currentTarget.duration)}
-        />
-        {isClient ? (
-          <div className="controls">
-            {!sheet && (
-              <button className={`btn ${status === "reacting" ? "hot" : "rec"}`} onClick={clientDone} disabled={status === "thinking"}>
-                <span className="o" />
-                {status === "thinking" ? "Writing your notes…" : "Done"}
+    <>
+      <nav className="nav">
+        <div className="bar">
+          <span className="mark">Bangerz Studio Revisions</span>
+          <div className="nav-r">
+            {!isClient && (
+              <button className="btn sm" onClick={copyLink} title="Client-mode link for the delivery email">
+                Copy review link
               </button>
             )}
-            <span className="hint">
-              {status === "reacting" ? "Listening. Talk whenever." : `${notes.length} note${notes.length === 1 ? "" : "s"}`}
-            </span>
           </div>
-        ) : (
-        <div className="controls">
-          <button
-            className={`btn ${status === "reacting" ? "hot" : "rec"}`}
-            onClick={status === "reacting" ? finishReaction : startReaction}
-            disabled={(status !== "idle" && status !== "reacting") || !!sheet}
-          >
-            <span className="o" />
-            {status === "reacting" ? "Stop reaction track" : "Record reaction track"}
-          </button>
-          <button
-            className={`btn ${status === "recording" ? "hot" : ""}`}
-            onKeyDown={(e) => e.code === "Space" && e.preventDefault()}
-            onMouseDown={startRecording}
-            onMouseUp={stopRecording}
-            onTouchStart={startRecording}
-            onTouchEnd={stopRecording}
-            disabled={status === "thinking" || status === "reacting" || !!sheet}
-          >
-            {status === "recording" ? "Listening…" : status === "thinking" ? "Writing the note…" : "Hold to talk"}
-          </button>
-          <button className="btn ghost" onClick={() => finish()} disabled={notes.length === 0 || status !== "idle" || !!sheet}>
-            Finish session
-          </button>
-          {sheet || notes.length ? (
-            <button className="btn ghost" onClick={clearSession} disabled={status !== "idle"}>
-              Clear
-            </button>
-          ) : (
-            <button className="btn solid" onClick={showExample} disabled={status !== "idle"}>
-              See a finished review →
-            </button>
-          )}
-          <button className="btn ghost" onClick={copyLink} title="Client-mode link for the delivery email">
-            Copy review link
-          </button>
-          <span className="hint">
-            {notes.length} note{notes.length === 1 ? "" : "s"}{needsWord ? ` · ${needsWord} needs a word` : ""}
-          </span>
         </div>
-        )}
-        {pending && (
-          <div className="callout" role="status">
-            <span className="who">Agent asks</span>
-            <span className="q">{pending.clarifying_question}</span>
-            <span className="how">Just answer out loud. Hold to talk, and the note at {pending.timestamp_label} updates itself.</span>
-          </div>
-        )}
-        {error && <p className="err">{error}</p>}
-      </section>
-
-      <aside className="cues" aria-label="Cues from the brief">
-        <h2>From the brief</h2>
-        {!activeCue && pastCues.length === 0 && (
-          <p className="empty">Cues from your brief appear here as the song plays.</p>
-        )}
-        {activeCue && (
-          <div className="cue on" role="status">
-            <div className="chips">
-              <span className="chip">{activeCue.section}</span>
-              <span className={`chip kind ${activeCue.kind}`}>{activeCue.kind}</span>
-            </div>
-            <div className="q">{activeCue.question}</div>
-            <div className="drain" aria-hidden="true"><i style={{ width: `${drainPct}%` }} /></div>
-          </div>
-        )}
-        {pastCues.length > 0 && (
-          <div className="past">
-            {[...pastCues].reverse().map((c) => {
-              const n = noteForCue(c);
-              return (
-                <div key={c.id} className="cue">
-                  <div className="chips">
-                    <span className="chip">{c.section}</span>
-                    <span className={`chip kind ${c.kind}`}>{c.kind}</span>
-                  </div>
-                  <div className="q">{c.question}</div>
-                  {n ? (
-                    <div className="r ok">✓ <span className={`chip pri ${priClass(n)}`}>{priLabel(n)}</span></div>
-                  ) : (
-                    <div className="r">no reaction</div>
-                  )}
+      </nav>
+      <main className="wrap">
+        <header className="hero">
+          {isClient ? (
+            <>
+              <div>
+                <div className="kicker">
+                  <span className="eyebrow">Draft for review</span>
+                  {demo !== null && <span className={`chip ${demo ? "" : "live"}`}>{demo ? "offline demo" : "live"}</span>}
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </aside>
-      </div>
-
-      <section className="sec" aria-label="Notes on the timeline" style={isClient && !started ? { display: "none" } : undefined}>
-        <h2>On the timeline</h2>
-        {notes.length === 0 && <p className="empty">No notes yet. Press record and say what you hear.</p>}
-        <ul className="notes">
-          {notes.map((n) => (
-            <li key={n.id} className="note">
-              <span className="ts">{n.timestamp_label}</span>
-              <div className="body">
-                <div className="chips">
-                  <span className="chip">{n.section}</span>
-                  <span className="chip">{n.category}</span>
-                  <span className={`chip pri ${priClass(n)}`}>{priLabel(n)}</span>
-                </div>
-                <div className="pn">{n.production_note}</div>
-                <div className="qt">
-                  “{n.transcript}”{n.clarification ? <> → <span>“{n.clarification}”</span></> : null}
-                </div>
+                <h1>
+                  {SONG}. <em>Your draft is ready.</em>
+                </h1>
               </div>
-            </li>
-          ))}
-        </ul>
-      </section>
+              <p className="lede">Matt sent you a draft. Press record, say what you hear, and you&apos;re done.</p>
+            </>
+          ) : (
+            <>
+              <div>
+                <div className="kicker">
+                  <span className="eyebrow">Revision room</span>
+                  {demo !== null && <span className={`chip ${demo ? "" : "live"}`}>{demo ? "offline demo" : "live"}</span>}
+                </div>
+                <h1>
+                  Talk back to the draft. <em>Every remark lands on the timeline.</em>
+                </h1>
+              </div>
+              <p className="lede">
+                Press record. The song plays straight through, you say what you hear, and every remark lands on the timeline. Or hold{" "}
+                <kbd>space</kbd> to drop one note right where you are.
+              </p>
+            </>
+          )}
+        </header>
 
-      {sheet && (
-        <section className="sheet" aria-label="Revision sheet">
-          <div className="top">
-            <h2>Revision sheet</h2>
-            {!isClient && <span className="cost">session cost ≈ ${sheet.cost_estimate_usd} · {notes.length} notes</span>}
-          </div>
-          <div className="tally">
-            <div className="must"><span className="n">{sheet.must_fix.length}</span><span className="l">must fix</span></div>
-            <div className="nice"><span className="n">{sheet.nice_to_have.length}</span><span className="l">nice to have</span></div>
-            <div className="word"><span className="n">{sheet.unclear.length}</span><span className="l">still unclear</span></div>
-          </div>
-          <p className="readback"><b>Read-back:</b> {sheet.readback_text}</p>
-          {!isClient && (
-            <div className="controls">
-              <button className="btn solid" onClick={download}>Download JSON</button>
-              <button className="btn" onClick={() => speak(sheet.readback_text)}>Play read-back</button>
-            </div>
+        <div className="canvas">
+          {/* Static painting with hand-made WebP variants, so next/image's optimizer adds nothing. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="art"
+            src="/art/musicians-1800.webp"
+            srcSet="/art/musicians-900.webp 900w, /art/musicians-1800.webp 1800w"
+            sizes="(max-width: 860px) 100vw, 1180px"
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
+
+          {isClient && !started && (
+            <section className="card landing" aria-label="Start your review">
+              <span className="eyebrow">Before you press start</span>
+              <h2>Ready when you are.</h2>
+              <p>
+                The song plays from the top. Talk over it like Matt is in the room: what you like, what&apos;s off, what you&apos;d change. Press Done when it ends.
+              </p>
+              <p className="consent">
+                Your voice is used to write revision notes for this song, kept 30 days, delete any time.
+              </p>
+              <div className="controls">
+                <button className="btn rec" onClick={startClient}>
+                  <span className="o" />
+                  Start
+                </button>
+              </div>
+              {error && <p className="err">{error}</p>}
+            </section>
           )}
-          {(sheet.confirmed_checks.length > 0 || sheet.unanswered_checks.length > 0) && (
-            <div className="checks">
-              {sheet.confirmed_checks.length > 0 && (
-                <>
-                  <h2>Confirmed required checks</h2>
-                  <ul>
-                    {sheet.confirmed_checks.map((c) => (
-                      <li key={c.cue.id}>
-                        <span className="ts">{formatTime(c.cue.at)}</span>
-                        <span className="chip">{c.cue.section}</span>
-                        <span>{c.cue.question}</span>
-                        {c.note && <span className={`chip pri ${priClass(c.note)}`}>{priLabel(c.note)}</span>}
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-              {sheet.unanswered_checks.length > 0 && (
-                <>
-                  <h2 className="miss">Unanswered required checks</h2>
-                  <ul>
-                    {sheet.unanswered_checks.map((c) => (
-                      <li key={c.cue.id}>
-                        <span className="ts">{formatTime(c.cue.at)}</span>
-                        <span className="chip">{c.cue.section}</span>
-                        <span>{c.cue.question}</span>
-                        <span className="chip">no reaction</span>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </div>
+
+          {isClient && sheet && (
+            <section className="card closing" aria-label="Sent">
+              <span className="eyebrow">Review sent</span>
+              <h2>Sent to Matt.</h2>
+              <p>You can close this tab. Here&apos;s what was captured, so you know it landed.</p>
+            </section>
           )}
-          {!isClient && <pre className="json">{JSON.stringify(sheet, null, 2)}</pre>}
+
+          <div className="stage" style={isClient && (!started || sheet) ? { display: "none" } : undefined}>
+            <section className="card player" aria-label="Draft player">
+              <div className="song">
+                <div>
+                  <span className="eyebrow">Draft</span>
+                  <span className="t">{SONG}</span>
+                </div>
+                <span className="m">{formatTime(time)} / {formatTime(duration)}</span>
+              </div>
+              <div className="timeline" onClick={seek} aria-hidden="true">
+                {bars.map((h, i) => (
+                  <i key={i} className={pct(time) > (i / bars.length) * 100 ? "p" : ""} style={{ height: `${h}%` }} />
+                ))}
+                <span className="head" data-t={formatTime(time)} style={{ left: `${pct(time)}%` }} />
+                {CUES.map((c) => (
+                  <span key={c.id} className={`dot cue-mark ${c.kind}`} style={{ left: `${pct(c.at)}%` }} title={c.question} />
+                ))}
+                {notes.map((n) => (
+                  <span key={n.id} className={`dot ${priClass(n)}`} style={{ left: `${pct(n.timestamp_seconds)}%` }} title={n.timestamp_label} />
+                ))}
+              </div>
+              <audio
+                ref={audioRef}
+                src={SRC}
+                controls
+                onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+                onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+                onDurationChange={(e) => setDuration(e.currentTarget.duration)}
+                onCanPlay={(e) => setDuration(e.currentTarget.duration)}
+              />
+              {isClient ? (
+                <div className="controls">
+                  {!sheet && (
+                    <button className={`btn ${status === "reacting" ? "hot" : "rec"}`} onClick={clientDone} disabled={status === "thinking"}>
+                      <span className="o" />
+                      {status === "thinking" ? "Writing your notes…" : "Done"}
+                    </button>
+                  )}
+                  <span className="hint">
+                    {status === "reacting" ? "Listening. Talk whenever." : `${notes.length} note${notes.length === 1 ? "" : "s"}`}
+                  </span>
+                </div>
+              ) : (
+                <div className="controls">
+                  <button
+                    className={`btn ${status === "reacting" ? "hot" : "rec"}`}
+                    onClick={status === "reacting" ? finishReaction : startReaction}
+                    disabled={(status !== "idle" && status !== "reacting") || !!sheet}
+                  >
+                    <span className="o" />
+                    {status === "reacting" ? "Stop reaction track" : "Record reaction track"}
+                  </button>
+                  <button
+                    className={`btn ${status === "recording" ? "hot" : ""}`}
+                    onKeyDown={(e) => e.code === "Space" && e.preventDefault()}
+                    onMouseDown={startRecording}
+                    onMouseUp={stopRecording}
+                    onTouchStart={startRecording}
+                    onTouchEnd={stopRecording}
+                    disabled={status === "thinking" || status === "reacting" || !!sheet}
+                  >
+                    {status === "recording" ? "Listening…" : status === "thinking" ? "Writing the note…" : "Hold to talk"}
+                  </button>
+                  <button className="btn" onClick={() => finish()} disabled={notes.length === 0 || status !== "idle" || !!sheet}>
+                    Finish session
+                  </button>
+                  {sheet || notes.length ? (
+                    <button className="btn ghost" onClick={clearSession} disabled={status !== "idle"}>
+                      Clear
+                    </button>
+                  ) : (
+                    <button className="btn solid" onClick={showExample} disabled={status !== "idle"}>
+                      See a finished review →
+                    </button>
+                  )}
+                  <span className="hint">
+                    {notes.length} note{notes.length === 1 ? "" : "s"}{needsWord ? ` · ${needsWord} needs a word` : ""}
+                  </span>
+                </div>
+              )}
+              {pending && (
+                <div className="callout" role="status">
+                  <span className="who">Agent asks</span>
+                  <span className="q">{pending.clarifying_question}</span>
+                  <span className="how">Just answer out loud. Hold to talk, and the note at {pending.timestamp_label} updates itself.</span>
+                </div>
+              )}
+              {error && <p className="err">{error}</p>}
+            </section>
+
+            <aside className="card cues" aria-label="Cues from the brief">
+              <h2 className="eyebrow">From the brief</h2>
+              {!activeCue && pastCues.length === 0 && (
+                <p className="empty">Cues from your brief appear here as the song plays.</p>
+              )}
+              {activeCue && (
+                <div className="cue on" role="status">
+                  <div className="chips">
+                    <span className="chip">{activeCue.section}</span>
+                    <span className={`chip kind ${activeCue.kind}`}>{activeCue.kind}</span>
+                  </div>
+                  <div className="q">{activeCue.question}</div>
+                  <div className="drain" aria-hidden="true"><i style={{ width: `${drainPct}%` }} /></div>
+                </div>
+              )}
+              {pastCues.length > 0 && (
+                <div className="past">
+                  {[...pastCues].reverse().map((c) => {
+                    const n = noteForCue(c);
+                    return (
+                      <div key={c.id} className="cue">
+                        <div className="chips">
+                          <span className="chip">{c.section}</span>
+                          <span className={`chip kind ${c.kind}`}>{c.kind}</span>
+                        </div>
+                        <div className="q">{c.question}</div>
+                        {n ? (
+                          <div className="r ok">✓ <span className={`chip pri ${priClass(n)}`}>{priLabel(n)}</span></div>
+                        ) : (
+                          <div className="r">no reaction</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </aside>
+          </div>
+        </div>
+        <p className="credit">
+          <span>Caravaggio, The Musicians, 1597</span>
+          <span>The Met, Open Access CC0</span>
+        </p>
+
+        <section className="sec" aria-label="Notes on the timeline" style={isClient && !started ? { display: "none" } : undefined}>
+          <div className="sec-head">
+            <h2>
+              On the timeline. <em>{notes.length} note{notes.length === 1 ? "" : "s"}.</em>
+            </h2>
+          </div>
+          {notes.length === 0 ? (
+            <p className="card empty">No notes yet. Press record and say what you hear.</p>
+          ) : (
+            <ul className="card notes">
+              {notes.map((n) => (
+                <li key={n.id} className="note">
+                  <span className="ts">{n.timestamp_label}</span>
+                  <div className="body">
+                    <div className="chips">
+                      <span className="chip">{n.section}</span>
+                      <span className="chip">{n.category}</span>
+                      <span className={`chip pri ${priClass(n)}`}>{priLabel(n)}</span>
+                    </div>
+                    <div className="pn">{n.production_note}</div>
+                    <div className="qt">
+                      “{n.transcript}”{n.clarification ? <> → <span>“{n.clarification}”</span></> : null}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
-      )}
-      {toast && <div className="toast" role="status">{toast}</div>}
-    </main>
+
+        {sheet && (
+          <section className="card sheet" aria-label="Revision sheet">
+            <div className="top">
+              <h2>
+                Revision sheet. <em>Ready for the writer.</em>
+              </h2>
+              {!isClient && <span className="cost">session cost ≈ ${sheet.cost_estimate_usd} · {notes.length} notes</span>}
+            </div>
+            <div className="tally">
+              <div className="must"><span className="n">{sheet.must_fix.length}</span><span className="l">must fix</span></div>
+              <div className="nice"><span className="n">{sheet.nice_to_have.length}</span><span className="l">nice to have</span></div>
+              <div className="word"><span className="n">{sheet.unclear.length}</span><span className="l">still unclear</span></div>
+            </div>
+            <p className="readback"><b>Read-back:</b> {sheet.readback_text}</p>
+            {!isClient && (
+              <div className="controls">
+                <button className="btn solid" onClick={download}>Download JSON</button>
+                <button className="btn" onClick={() => speak(sheet.readback_text)}>Play read-back</button>
+              </div>
+            )}
+            {(sheet.confirmed_checks.length > 0 || sheet.unanswered_checks.length > 0) && (
+              <div className="checks">
+                {sheet.confirmed_checks.length > 0 && (
+                  <div>
+                    <h3 className="eyebrow">Confirmed required checks</h3>
+                    <ul>
+                      {sheet.confirmed_checks.map((c) => (
+                        <li key={c.cue.id}>
+                          <span className="ts">{formatTime(c.cue.at)}</span>
+                          <span className="chip">{c.cue.section}</span>
+                          <span className="cq">{c.cue.question}</span>
+                          {c.note && <span className={`chip pri ${priClass(c.note)}`}>{priLabel(c.note)}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {sheet.unanswered_checks.length > 0 && (
+                  <div>
+                    <h3 className="eyebrow miss">Unanswered required checks</h3>
+                    <ul>
+                      {sheet.unanswered_checks.map((c) => (
+                        <li key={c.cue.id}>
+                          <span className="ts">{formatTime(c.cue.at)}</span>
+                          <span className="chip">{c.cue.section}</span>
+                          <span className="cq">{c.cue.question}</span>
+                          <span className="chip">no reaction</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+            {!isClient && <pre className="json">{JSON.stringify(sheet, null, 2)}</pre>}
+          </section>
+        )}
+        {toast && <div className="toast" role="status">{toast}</div>}
+      </main>
+    </>
   );
 }
 
